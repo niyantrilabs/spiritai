@@ -1,0 +1,62 @@
+{
+  "name": "@niyantrilabs/spiritai",
+  "version": "1.0.0",
+  "description": "Spirit AI - Mobile Autonomous Developer for multi-platform app development",
+  "main": "index.js",
+  "bin": {
+    "spiritai": "./index.js",
+    "spirit": "./index.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "spiritai",
+    "spirit-ai",
+    "niyantri-labs",
+    "autonomous-developer",
+    "ai-developer",
+    "mobile-development",
+    "flutter",
+    "android",
+    "ios",
+    "react-native",
+    "kotlin",
+    "swift",
+    "dart",
+    "cross-platform",
+    "multi-platform",
+    "cli",
+    "ai-assistant",
+    "code-generation"
+  ],
+  "author": "Niyantri Labs",
+  "license": "MIT",
+  "dependencies": {
+    "readline": "^1.3.0",
+    "socket.io-client": "^4.7.2",
+    "yargs": "^17.7.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/niyantrilabs/spiritai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/niyantrilabs/spiritai/issues"
+  },
+  "homepage": "https://github.com/niyantrilabs/spiritai#readme",
+  "preferGlobal": true,
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
