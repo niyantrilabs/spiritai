@@ -1,21 +1,21 @@
 # Spirit AI
 
-**Mobile Autonomous Developer for Multi-Platform App Development**
+**Autonomous Developer for Multi-Platform Development**
 
-Spirit AI is an intelligent command-line interface agent that connects to your development server and enables autonomous mobile application development across Flutter, Android, iOS, React Native, and all major mobile frameworks.
+Spirit AI is an agentic development tool that lives in your terminal, understands your development environment, and helps you build faster by executing complex tasks, managing file operations, and handling development workflows -- all through natural language commands via your connected development server.
 
 ## Overview
 
-Spirit AI provides developers with an advanced autonomous development environment capable of executing complex mobile development tasks across multiple platforms. The system offers real-time connectivity to development servers, intelligent code manipulation, and comprehensive system integration.
+Spirit AI connects to your development server and acts as an intelligent agent capable of understanding your codebase, executing development tasks, and managing your entire development workflow. The system provides real-time bidirectional communication, intelligent code manipulation, and comprehensive system integration.
 
 ## Key Capabilities
 
-- Autonomous mobile application development across all major platforms
-- Comprehensive file system operations with line-level precision editing
-- Cross-platform support for Flutter, Android (Kotlin/Java), iOS (Swift/Objective-C), and React Native
+- Autonomous code generation and modification across your entire project
+- Surgical precision file operations with line-level editing accuracy
 - Real-time bidirectional communication with development servers
 - Intelligent command execution with full system context awareness
-- Advanced surgical code editing operations including targeted line modifications
+- Advanced code editing operations including targeted modifications
+- Comprehensive development environment detection and integration
 
 ## Installation
 
@@ -57,14 +57,7 @@ Spirit AI is compatible with the following platforms:
 
 ## Development Environment Detection
 
-Spirit AI automatically detects and reports the availability of the following development tools:
-
-- Java Runtime Environment and Java Development Kit
-- Android Debug Bridge (ADB)
-- Flutter SDK and Dart SDK
-- Git version control system
-- Node Package Manager (npm)
-- Python interpreter and pip package manager
+Spirit AI automatically detects and reports the availability of development tools in your environment, including version control systems, package managers, programming language runtimes, and development frameworks.
 
 ## Interactive Commands
 
@@ -120,6 +113,6 @@ https://github.com/niyantrilabs/spiritai/issues
 
 ## Version History
 
-Current stable release: 1.0.0
+Current stable release: 1.0.2
 
 For detailed version history and release notes, refer to the project's GitHub releases page.
