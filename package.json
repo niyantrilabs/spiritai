@@ -1,6 +1,6 @@
 {
   "name": "@niyantrilabs/spiritai",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Spirit AI - Mobile Autonomous Developer for multi-platform app development",
   "main": "index.js",
   "bin": {
