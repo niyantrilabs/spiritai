@@ -23,7 +23,7 @@ const argv = yargs(hideBin(process.argv))
   .argv;
 
 const connectionCode = argv.code;
-const serverUrl ="https://python.thespiritai.com";
+const serverUrl ="https://desktop.thespiritai.com";
 let socket;
 
 const rl = readline.createInterface({
