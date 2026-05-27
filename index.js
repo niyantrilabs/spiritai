@@ -4,7 +4,7 @@ const { hideBin } = require('yargs/helpers');
 const { io } = require("socket.io-client");
 const readline = require('readline');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const { promisify } = require('util');
 const fs = require('fs').promises;
 const path = require('path');
@@ -695,35 +695,158 @@ class ToolExecutor {
 
   static async executeSystemCommand(command, workingDir) {
     const execDir = workingDir || currentWorkingDirectory;
-    
+
+    const parseCommand = (cmd) => {
+      if (!cmd || typeof cmd !== 'string') return null;
+      const tokens = [];
+      let cur = '';
+      let inSingle = false;
+      let inDouble = false;
+      let escape = false;
+
+      for (let i = 0; i < cmd.length; i++) {
+        const ch = cmd[i];
+        if (escape) {
+          cur += ch;
+          escape = false;
+          continue;
+        }
+        if (ch === '\\') {
+          escape = true;
+          continue;
+        }
+        if (ch === "'" && !inDouble) {
+          inSingle = !inSingle;
+          continue;
+        }
+        if (ch === '"' && !inSingle) {
+          inDouble = !inDouble;
+          continue;
+        }
+        if (!inSingle && !inDouble && /\s/.test(ch)) {
+          if (cur.length > 0) {
+            tokens.push(cur);
+            cur = '';
+          }
+          continue;
+        }
+        cur += ch;
+      }
+
+      if (escape || inSingle || inDouble) return null;
+      if (cur.length > 0) tokens.push(cur);
+      if (tokens.length === 0) return null;
+      return tokens;
+    };
+
     try {
-      const { stdout, stderr } = await execAsync(command, {
-        cwd: execDir,
-        timeout: 600000, // 10 minutes
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer
-        shell: true
+      const parts = parseCommand(command);
+      if (!parts) {
+        return {
+          output: 'Invalid command',
+          success: false,
+          cwd: execDir,
+          command: command
+        };
+      }
+
+      const executable = parts[0];
+      const args = parts.slice(1);
+      const maxBuffer = 50 * 1024 * 1024;
+      const timeoutMs = 600000;
+
+      return await new Promise((resolve) => {
+        let stdout = '';
+        let stderr = '';
+        let stdoutLen = 0;
+        let stderrLen = 0;
+        let finished = false;
+
+        const child = spawn(executable, args, { cwd: execDir, windowsHide: true });
+
+        const killChild = () => {
+          try { child.kill('SIGKILL'); } catch (e) {}
+        };
+
+        const onBufferExceeded = (streamName) => {
+          if (finished) return;
+          finished = true;
+          killChild();
+          resolve({
+            output: `Command failed: ${streamName} buffer exceeded ${maxBuffer} bytes`,
+            success: false,
+            cwd: execDir,
+            command: command
+          });
+        };
+
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          killChild();
+          resolve({
+            output: 'Command failed: timed out',
+            success: false,
+            timed_out: true,
+            cwd: execDir,
+            command: command
+          });
+        }, timeoutMs);
+
+        child.stdout.on('data', (chunk) => {
+          const s = chunk.toString();
+          stdoutLen += Buffer.byteLength(s);
+          if (stdoutLen > maxBuffer) {
+            clearTimeout(timer);
+            onBufferExceeded('stdout');
+            return;
+          }
+          stdout += s;
+        });
+
+        child.stderr.on('data', (chunk) => {
+          const s = chunk.toString();
+          stderrLen += Buffer.byteLength(s);
+          if (stderrLen > maxBuffer) {
+            clearTimeout(timer);
+            onBufferExceeded('stderr');
+            return;
+          }
+          stderr += s;
+        });
+
+        child.on('error', (err) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          resolve({
+            output: `Command failed: ${err.message}`,
+            success: false,
+            cwd: execDir,
+            command: command
+          });
+        });
+
+        child.on('close', (code) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          const output = (stdout || '') + (stderr || '');
+          resolve({
+            output: output || 'Command completed successfully',
+            success: code === 0,
+            cwd: execDir,
+            command: command,
+            exit_code: code
+          });
+        });
       });
-      
-      const output = (stdout || '') + (stderr || '');
-      
-      const success = !stderr || stderr.trim().length === 0;
-      
-      return {
-        output: output || 'Command completed successfully',
-        success: success,
-        cwd: execDir,
-        command: command
-      };
-      
     } catch (error) {
-      const output = (error.stdout || '') + (error.stderr || '') || error.message;
-      
       return {
-        output: `Command failed: ${output}`,
+        output: `Command failed: ${error.message}`,
         success: false,
         cwd: execDir,
-        command: command,
-        exit_code: error.code
+        command: command
       };
     }
   }
