@@ -4,12 +4,10 @@ const { hideBin } = require('yargs/helpers');
 const { io } = require("socket.io-client");
 const readline = require('readline');
 const os = require('os');
-const { exec } = require('child_process');
-const { promisify } = require('util');
+const { spawn } = require('child_process');
 const fs = require('fs').promises;
 const path = require('path');
 
-const execAsync = promisify(exec);
 
 let currentWorkingDirectory = process.cwd();
 
@@ -695,35 +693,212 @@ class ToolExecutor {
 
   static async executeSystemCommand(command, workingDir) {
     const execDir = workingDir || currentWorkingDirectory;
-    
-    try {
-      const { stdout, stderr } = await execAsync(command, {
-        cwd: execDir,
-        timeout: 600000, // 10 minutes
-        maxBuffer: 50 * 1024 * 1024, // 50MB buffer
-        shell: true
-      });
-      
-      const output = (stdout || '') + (stderr || '');
-      
-      const success = !stderr || stderr.trim().length === 0;
-      
+
+    // Reject commands containing shell metacharacters or newlines
+    const unsafePattern = /[;&|><\$`*?~{}()\n\r]/;
+    if (!command || typeof command !== 'string') {
       return {
-        output: output || 'Command completed successfully',
-        success: success,
+        output: 'Command rejected: invalid command',
+        success: false,
         cwd: execDir,
         command: command
       };
-      
-    } catch (error) {
-      const output = (error.stdout || '') + (error.stderr || '') || error.message;
-      
+    }
+
+    if (unsafePattern.test(command)) {
       return {
-        output: `Command failed: ${output}`,
+        output: 'Command rejected: contains unsafe shell metacharacters or newlines',
+        success: false,
+        cwd: execDir,
+        command: command
+      };
+    }
+
+    // Simple argv parser supporting single and double quotes and basic backslash escapes
+    const argv = [];
+    let i = 0;
+    const len = command.length;
+
+    try {
+      while (i < len) {
+        while (i < len && /\s/.test(command[i])) i++;
+        if (i >= len) break;
+        let ch = command[i];
+        let arg = '';
+        if (ch === '"' || ch === "'") {
+          const quote = ch;
+          i++;
+          while (i < len) {
+            ch = command[i];
+            if (ch === '\\') {
+              if (i + 1 < len) {
+                arg += command[i + 1];
+                i += 2;
+                continue;
+              }
+            }
+            if (ch === quote) {
+              i++;
+              break;
+            }
+            arg += ch;
+            i++;
+          }
+        } else {
+          while (i < len && !/\s/.test(command[i])) {
+            if (command[i] === '\\' && i + 1 < len) {
+              arg += command[i + 1];
+              i += 2;
+            } else {
+              arg += command[i];
+              i++;
+            }
+          }
+        }
+        argv.push(arg);
+      }
+    } catch (parseErr) {
+      return {
+        output: `Command rejected: failed to parse command - ${parseErr.message}`,
+        success: false,
+        cwd: execDir,
+        command: command
+      };
+    }
+
+    if (argv.length === 0) {
+      return {
+        output: 'Command rejected: empty command',
+        success: false,
+        cwd: execDir,
+        command: command
+      };
+    }
+
+    const cmd = argv.shift();
+
+    const MAX_COMBINED = 50 * 1024 * 1024; // 50MB
+    const TIMEOUT_MS = 600000; // 10 minutes
+
+    try {
+      return await new Promise((resolve) => {
+        let stdout = '';
+        let stderr = '';
+        let combined = 0;
+        let killedForSize = false;
+        let timedOut = false;
+
+        let child;
+        try {
+          child = spawn(cmd, argv, { cwd: execDir, shell: false });
+        } catch (spawnErr) {
+          resolve({
+            output: `Command failed: ${spawnErr.message}`,
+            success: false,
+            cwd: execDir,
+            command: command,
+            exit_code: spawnErr.code || 1
+          });
+          return;
+        }
+
+        const killChild = () => {
+          try { child.kill('SIGKILL'); } catch (e) {}
+        };
+
+        const killTimer = setTimeout(() => {
+          timedOut = true;
+          killChild();
+        }, TIMEOUT_MS);
+
+        if (child.stdout) {
+          child.stdout.on('data', (chunk) => {
+            const s = chunk.toString();
+            stdout += s;
+            combined += Buffer.byteLength(s);
+            if (combined > MAX_COMBINED) {
+              killedForSize = true;
+              killChild();
+            }
+          });
+        }
+
+        if (child.stderr) {
+          child.stderr.on('data', (chunk) => {
+            const s = chunk.toString();
+            stderr += s;
+            combined += Buffer.byteLength(s);
+            if (combined > MAX_COMBINED) {
+              killedForSize = true;
+              killChild();
+            }
+          });
+        }
+
+        child.on('error', (err) => {
+          clearTimeout(killTimer);
+          resolve({
+            output: `Command failed: ${err.message}`,
+            success: false,
+            cwd: execDir,
+            command: command,
+            exit_code: err.code || 1
+          });
+        });
+
+        child.on('close', (code, signal) => {
+          clearTimeout(killTimer);
+          let output = (stdout || '') + (stderr || '');
+
+          if (timedOut) {
+            resolve({
+              output: `Command failed: timed out after ${TIMEOUT_MS}ms`,
+              success: false,
+              cwd: execDir,
+              command: command,
+              exit_code: null
+            });
+            return;
+          }
+
+          if (killedForSize) {
+            resolve({
+              output: 'Command failed: output exceeded maximum buffer size',
+              success: false,
+              cwd: execDir,
+              command: command,
+              exit_code: code
+            });
+            return;
+          }
+
+          const success = (code === 0) && (!stderr || stderr.trim().length === 0);
+
+          if (success) {
+            resolve({
+              output: output || 'Command completed successfully',
+              success: true,
+              cwd: execDir,
+              command: command
+            });
+          } else {
+            resolve({
+              output: `Command failed: ${output}`,
+              success: false,
+              cwd: execDir,
+              command: command,
+              exit_code: code
+            });
+          }
+        });
+      });
+    } catch (error) {
+      return {
+        output: `Command failed: ${error.message}`,
         success: false,
         cwd: execDir,
         command: command,
-        exit_code: error.code
+        exit_code: error.code || null
       };
     }
   }
